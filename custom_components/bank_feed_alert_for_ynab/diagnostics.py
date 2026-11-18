@@ -8,6 +8,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 
 from .coordinator import FeedConfigEntry
+from .feeds import cycles
 
 TO_REDACT = {"token", "access_token", "refresh_token"}
 
@@ -30,4 +31,9 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: FeedCon
             }
             for feed in (snapshot.feeds.values() if snapshot else [])
         ],
+        # Every observed break and reconnection, bracketed by the checks either side, and the
+        # connection lifetimes they imply - the data for learning when connections really lapse.
+        "history": [event.as_dict() for event in (snapshot.history if snapshot else ())],
+        "cycles": cycles(snapshot.history) if snapshot else [],
+        "check_interval": str(entry.runtime_data.update_interval),
     }

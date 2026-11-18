@@ -19,6 +19,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FeedConfigEntry) -> bool
     implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(hass, entry)
     session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
     coordinator = FeedCoordinator(hass, entry, session)
+    coordinator.options_at_setup = dict(entry.options)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
@@ -45,7 +46,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: FeedConfigEntry) -> Non
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: FeedConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
+    # Update listeners fire for every entry update, including Home Assistant saving a refreshed
+    # OAuth token (every couple of hours). Reload only when the options really changed.
+    if dict(entry.options) != entry.runtime_data.options_at_setup:
+        await hass.config_entries.async_reload(entry.entry_id)
 
 
 def issue_id(entry_id: str) -> str:

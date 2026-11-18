@@ -28,12 +28,13 @@ from .const import (
     DEFAULT_CONNECTION_LIFETIME_DAYS,
     DEFAULT_ESCALATE_AFTER_DAYS,
     DOMAIN,
+    EVENT_CONNECTION_CHANGED,
     FAST_INTERVAL,
     STORAGE_VERSION,
     WINDOW_AFTER_LAPSE,
     WINDOW_BEFORE_LAPSE,
 )
-from .feeds import Snapshot, evaluate, next_interval
+from .feeds import BROKE, Snapshot, cycles, evaluate, mark_reconnected, next_interval
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class FeedCoordinator(DataUpdateCoordinator[Snapshot]):
         self._plan_id: str = entry.data[CONF_PLAN_ID]
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, storage_key(entry.entry_id))
         self._memory: dict[str, Any] | None = None
-        self._accounts: list[dict[str, Any]] = []
+        self.options_at_setup: dict[str, Any] = dict(entry.options)
 
     # Options -----------------------------------------------------------------------------
 
@@ -87,11 +88,12 @@ class FeedCoordinator(DataUpdateCoordinator[Snapshot]):
     async def _async_update_data(self) -> Snapshot:
         await self._async_load_memory()
         try:
-            self._accounts = await self._fetch_accounts()
+            accounts = await self._fetch_accounts()
         except UpdateFailed:
             self.update_interval = FAST_INTERVAL  # retry soon, not in hours
             raise
-        snapshot = evaluate(self._accounts, self._memory, dt_util.utcnow())
+        snapshot = evaluate(accounts, self._memory, dt_util.utcnow())
+        self._announce(snapshot)
         await self._async_remember(snapshot)
         self._schedule_next(snapshot)
         return snapshot
@@ -151,16 +153,43 @@ class FeedCoordinator(DataUpdateCoordinator[Snapshot]):
         """The user renewed these connections (early, or before installing): restart their clocks."""
         if self.data is None:
             return
-        await self._async_load_memory()
-        assert self._memory is not None
-        stamp = dt_util.as_utc(when).isoformat()
-        for account_id in account_ids:
-            if account_id in self.data.feeds:
-                self._memory.setdefault(account_id, {})["last_reconnected"] = stamp
-        await self._store.async_save(self._memory)
-        snapshot = evaluate(self._accounts, self._memory, self.data.checked_at)
+        snapshot = mark_reconnected(self.data, account_ids, dt_util.as_utc(when))
+        self._announce(snapshot)
+        await self._async_remember(snapshot)
         self._schedule_next(snapshot)
         self.async_set_updated_data(snapshot)
+
+    def _announce(self, snapshot: Snapshot) -> None:
+        """Log each change and fire an event, so the timings outlive the recorder's purge window."""
+        for event in snapshot.changes:
+            data: dict[str, Any] = {
+                "plan": self.config_entry.title,
+                "account": event.name,
+                "account_id": event.account_id,
+                "change": event.kind,
+                "after": event.after.isoformat() if event.after else None,
+                "by": event.by.isoformat(),
+            }
+            if event.kind == BROKE:
+                lifetime = next(
+                    (c for c in reversed(cycles(snapshot.history)) if c["broke_by"] == data["by"]
+                     and c["account_id"] == event.account_id),
+                    None,
+                )
+                if lifetime:
+                    data["lifetime_min_hours"] = lifetime["lifetime_min_hours"]
+                    data["lifetime_max_hours"] = lifetime["lifetime_max_hours"]
+            _LOGGER.info(
+                "%s: bank connection %s (between %s and %s)%s",
+                event.name,
+                event.kind,
+                data["after"] or "unknown",
+                data["by"],
+                f", {data['lifetime_min_hours']}-{data['lifetime_max_hours']} h after it was last reconnected"
+                if "lifetime_max_hours" in data
+                else "",
+            )
+            self.hass.bus.async_fire(EVENT_CONNECTION_CHANGED, data)
 
     async def async_remove_store(self) -> None:
         """Forget the remembered state (the entry is being removed)."""

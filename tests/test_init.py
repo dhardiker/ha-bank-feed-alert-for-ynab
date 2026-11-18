@@ -268,3 +268,54 @@ async def test_mark_reconnected_projects_the_next_lapse(
     _serve(aioclient_mock, account("a", "Current account"), account("b", "Savings"))
     await _poll(hass, freezer, timedelta(hours=4))
     assert coordinator.update_interval == FAST_INTERVAL
+
+
+@pytest.mark.usefixtures("credentials")
+async def test_changes_fire_events_and_reach_diagnostics(
+    hass: HomeAssistant, aioclient_mock, config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+):
+    from custom_components.bank_feed_alert_for_ynab.const import EVENT_CONNECTION_CHANGED
+    from custom_components.bank_feed_alert_for_ynab.diagnostics import async_get_config_entry_diagnostics
+    from pytest_homeassistant_custom_component.common import async_capture_events
+
+    seen = async_capture_events(hass, EVENT_CONNECTION_CHANGED)
+    _serve(aioclient_mock, account("a", "Current account"))
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    _serve(aioclient_mock, account("a", "Current account", in_error=True))
+    await _poll(hass, freezer)
+    _serve(aioclient_mock, account("a", "Current account"))
+    await _poll(hass, freezer, FAST_INTERVAL)
+    _serve(aioclient_mock, account("a", "Current account", in_error=True))
+    await _poll(hass, freezer, timedelta(hours=4))
+    await hass.async_block_till_done()
+
+    assert [e.data["change"] for e in seen] == ["broke", "reconnected", "broke"]
+    assert seen[0].data["account"] == "Current account" and seen[0].data["after"] is not None
+    assert seen[2].data["lifetime_max_hours"] == pytest.approx(4.5, abs=0.01)
+
+    diag = await async_get_config_entry_diagnostics(hass, config_entry)
+    assert [h["kind"] for h in diag["history"]] == ["broke", "reconnected", "broke"]
+    (cycle,) = diag["cycles"]
+    assert cycle["lifetime_min_hours"] == pytest.approx(0, abs=0.01)
+    assert "access_token" not in str(diag["entry"]["data"])
+
+
+
+@pytest.mark.usefixtures("credentials")
+async def test_token_refresh_does_not_reload_but_options_do(
+    hass: HomeAssistant, aioclient_mock, config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+):
+    _serve(aioclient_mock, account("a", "Current account"))
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    first = config_entry.runtime_data
+
+    await _poll(hass, freezer)  # 4 h: the token is refreshed and saved to the entry
+    assert config_entry.data["token"]["access_token"] == "refreshed"
+    assert config_entry.runtime_data is first  # no reload
+
+    hass.config_entries.async_update_entry(config_entry, options={CONF_ESCALATE_AFTER_DAYS: 1})
+    await hass.async_block_till_done()
+    assert config_entry.runtime_data is not first  # options changed: reloaded

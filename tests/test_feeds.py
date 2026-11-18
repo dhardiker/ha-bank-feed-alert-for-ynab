@@ -112,3 +112,60 @@ def test_interval_never_sleeps_past_the_start_of_a_window():
     assert next_interval(snap, start - timedelta(hours=1), **WIN) == timedelta(hours=1)
     assert next_interval(snap, start - timedelta(minutes=5), **WIN) == FAST  # never below fast
     assert next_interval(snap, start - timedelta(hours=1), **{**WIN, "lifetime": None}) == NORMAL
+
+
+def test_history_brackets_each_change_between_two_checks():
+    from custom_components.bank_feed_alert_for_ynab.feeds import BROKE, RECONNECTED, cycles
+
+    t1, t2, t3, t4 = (T0 + timedelta(hours=h) for h in (0, 4, 4.5, 5))
+    s1 = evaluate([acct("a", "Current")], {}, t1)
+    assert s1.history == () and s1.changes == ()
+    s2 = evaluate([acct("a", "Current", in_error=True)], s1.memory(), t2)
+    assert [(e.kind, e.after, e.by) for e in s2.changes] == [(BROKE, t1, t2)]
+    s3 = evaluate([acct("a", "Current", in_error=True)], s2.memory(), t3)
+    assert s3.changes == ()
+    s4 = evaluate([acct("a", "Current")], s3.memory(), t4)
+    assert [(e.kind, e.after, e.by) for e in s4.changes] == [(RECONNECTED, t3, t4)]
+    assert [e.kind for e in s4.history] == [BROKE, RECONNECTED]
+
+    # 90 days on it breaks again, between two half-hourly checks: one complete cycle.
+    t5 = t4 + timedelta(days=90)
+    t6 = t5 + timedelta(minutes=30)
+    s5 = evaluate([acct("a", "Current")], s4.memory(), t5)
+    s6 = evaluate([acct("a", "Current", in_error=True)], s5.memory(), t6)
+    (cycle,) = cycles(s6.history)
+    assert cycle["start"] == RECONNECTED
+    assert cycle["lifetime_min_hours"] == round((t5 - t4).total_seconds() / 3600, 2)
+    assert cycle["lifetime_max_hours"] == round((t6 - t3).total_seconds() / 3600, 2)
+
+
+def test_first_check_already_broken_has_no_lower_bracket():
+    snap = evaluate([acct("a", "Current", in_error=True)], {}, T0)
+    (event,) = snap.changes
+    assert event.after is None and event.by == T0
+
+
+def test_marked_reconnection_starts_a_cycle_and_is_recorded():
+    from custom_components.bank_feed_alert_for_ynab.feeds import MARKED, cycles, mark_reconnected
+
+    snap = evaluate([acct("a", "Current"), acct("b", "Savings", in_error=True)], {}, T0)
+    marked = mark_reconnected(snap, ["a", "b"], T0 - timedelta(days=2))
+    assert [(e.kind, e.account_id) for e in marked.changes] == [(MARKED, "a")]  # b is broken: ignored
+    assert marked.feeds["a"].last_reconnected == T0 - timedelta(days=2)
+    later = evaluate([acct("a", "Current", in_error=True), acct("b", "Savings", in_error=True)],
+                     marked.memory(), T0 + timedelta(days=88))
+    (cycle,) = cycles(later.history)
+    assert cycle["start"] == MARKED and cycle["lifetime_max_hours"] == 90 * 24
+
+
+def test_history_is_capped_and_first_release_memory_still_loads():
+    from custom_components.bank_feed_alert_for_ynab.feeds import HISTORY_LIMIT
+
+    legacy = {"a": {"in_error_since": None, "last_reconnected": T0.isoformat()}}
+    snap = evaluate([acct("a", "Current")], legacy, T0 + timedelta(days=1))
+    assert snap.feeds["a"].last_reconnected == T0
+    memory = snap.memory()
+    for i in range(HISTORY_LIMIT + 10):
+        memory = evaluate([acct("a", "Current", in_error=bool(i % 2 == 0))], memory,
+                          T0 + timedelta(days=2, hours=i)).memory()
+    assert len(memory["history"]) == HISTORY_LIMIT

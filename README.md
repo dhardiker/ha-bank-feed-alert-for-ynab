@@ -59,13 +59,25 @@ Requires Home Assistant 2025.2 or later.
 ## Set up
 
 1. **Create a YNAB OAuth application.** In YNAB go to *Account Settings → Developer
-   Settings* (<https://app.ynab.com/settings/developer>) and click *New Application*.
-   - **Name:** anything that doesn't start with "YNAB". YNAB's terms reserve that,
-     though "… for YNAB" is fine. For example: *Bank Feed Alert for YNAB (home)*.
-   - **Redirect URI:** `https://my.home-assistant.io/redirect/oauth`. If you don't
-     use My Home Assistant, use your instance's external URL plus
-     `/auth/external/callback`.
-   - Leave *Default plan selection* off.
+   Settings* (<https://app.ynab.com/settings/developer>) and click *New Application*:
+
+   | Field | What to enter |
+   | --- | --- |
+   | Name | A name that doesn't start with "YNAB" (YNAB's terms reserve that; "… for YNAB" is fine). For example *HA Bank Feed Alert for YNAB*. You'll see it when you authorise. |
+   | Description | For example: *Home Assistant integration that watches the status of YNAB's bank connections and alerts when one needs reconnecting.* |
+   | Website URL | `https://github.com/dhardiker/ha-bank-feed-alert-for-ynab` |
+   | Privacy Policy URL | `https://github.com/dhardiker/ha-bank-feed-alert-for-ynab/blob/main/PRIVACY.md` |
+   | Redirect URI(s) | `https://my.home-assistant.io/redirect/oauth`: the only one needed. It's Home Assistant's own redirect service, which hands your browser back to *your* Home Assistant, so YNAB never needs to reach your home network. If you've disabled My Home Assistant (it's part of `default_config`), use your instance's URL plus `/auth/external/callback` instead. |
+   | Default plan selection | Leave off. The integration asks which plan to watch. |
+   | Terms of Service | Tick to confirm. The integration only reads, and keeps nothing outside your Home Assistant ([PRIVACY.md](PRIVACY.md)). |
+
+   ![YNAB's New OAuth Application form, filled in](docs/images/ynab-new-oauth-application.png)
+
+   *The example also lists the local-testing redirect URIs (`urn:ietf:wg:oauth:2.0:oob`,
+   `http://localhost`, `http://127.0.0.1`). They aren't needed, and you can delete them.*
+
+   Save it and keep the **Client ID** and **Client Secret** to hand (a password manager is a
+   good place).
 
    **Every installation uses its own OAuth application.** There is no shared app or
    client secret behind this project. New YNAB applications start in a "restricted mode"
@@ -91,6 +103,27 @@ them. `when` defaults to now.
 
 If YNAB ever stops accepting the authorisation, Home Assistant asks you to sign in
 again; the alert history is kept.
+
+## Learning when connections lapse
+
+YNAB doesn't publish how long a bank connection lasts, so the integration records every break
+and reconnection to find out. Each is bracketed between the last check that saw the old state
+and the first that saw the new one: 30 minutes apart while a connection is broken or near a
+projected lapse, a few hours otherwise. From a reconnection to the next break, that gives a
+lifetime with error bars. After a cycle or two you can tell whether it's 90 days to the minute,
+or "day 90 at a fixed time".
+
+- **Download diagnostics** on the integration: `history` lists the events (up to 200 are kept
+  across restarts), and `cycles` lists the lifetimes they imply (`lifetime_min_hours`,
+  `lifetime_max_hours`).
+- **Event** `bank_feed_alert_for_ynab_connection_changed` fires on every change, with `plan`,
+  `account`, `change` (`broke`, `reconnected` or `marked`), `after`, `by` and, for a break,
+  the lifetime bounds. Use it to log changes somewhere permanent.
+- **Logs** at `info` level:
+  `logger: {logs: {custom_components.bank_feed_alert_for_ynab: info}}`.
+
+If you learn your bank's pattern, please share it in an issue (the timings, not the names). It
+may let the projection get sharper for everyone.
 
 ## Example automations
 

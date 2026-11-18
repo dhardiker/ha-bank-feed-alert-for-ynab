@@ -37,5 +37,6 @@ WINDOW_BEFORE_LAPSE = timedelta(days=2)
 WINDOW_AFTER_LAPSE = timedelta(days=1)
 
 SERVICE_MARK_RECONNECTED = "mark_reconnected"
+EVENT_CONNECTION_CHANGED = f"{DOMAIN}_connection_changed"
 
 STORAGE_VERSION = 1

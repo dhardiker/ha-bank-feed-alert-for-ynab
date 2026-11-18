@@ -25,7 +25,10 @@ your data.
 - **The OAuth access and refresh tokens:** in the integration's config entry, in
   Home Assistant's own storage, as for any OAuth integration.
 - **For each linked account:** its ID, and the times an error was first seen and the
-  connection was next seen healthy (or that you marked it reconnected). These are in Home Assistant's storage
+  connection was next seen healthy (or that you marked it reconnected).
+- **A history of those changes** (up to 200 events: account ID and name, the kind of change,
+  and the check times either side). It is used only to work out how long connections
+  last, and you can see it in the integration's diagnostics download. These are in Home Assistant's storage
   (`.storage/bank_feed_alert_for_ynab.<entry id>`), so an alert keeps its start time
   across restarts.
 - **Entities and the repair issue:** account names, as shown in Home Assistant.
