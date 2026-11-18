@@ -23,6 +23,9 @@ It asks YNAB for **read-only** access, through **your own** YNAB OAuth applicati
 
 One device per YNAB plan (named after the plan), with:
 
+![The device page: overall status, one sensor per linked account, and when YNAB was last checked](docs/images/ha-device-page.png)
+
+
 | Entity | What it says |
 | --- | --- |
 | `binary_sensor.<plan>_bank_feeds_need_reconnecting` | On while any linked account's bank connection is in error. Attributes: `accounts` (names) and `broken_since`. |
@@ -126,8 +129,19 @@ through signing in:
 
    ![My Home Assistant's "Link account to Home Assistant?" page](docs/images/my-home-assistant-link-account.png)
 
-3. **Back in Home Assistant**, pick the plan to watch if you have more than one, and add the
-   integration again for another. The plan appears as a device with the entities below.
+3. **Back in Home Assistant, choose the plan** if your YNAB account has more than one (add the
+   integration again for another).
+
+   ![Choosing the plan to watch](docs/images/ha-choose-plan.png)
+
+4. **Name and assign.** The device is named after the plan, and Home Assistant builds the entity
+   IDs from the area and the name you give it here. Calling it *YNAB* in an area called *Cellar*
+   gives `binary_sensor.cellar_ynab_bank_feeds_need_reconnecting`. Use whatever reads well in
+   your automations.
+
+   ![Home Assistant's "Name and assign" step](docs/images/ha-name-and-assign.png)
+
+That's it: the device lists every linked account (names blanked here), checked straight away.
 
 ### Options
 
