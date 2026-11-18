@@ -1,6 +1,6 @@
 {
   "application_credentials": {
-    "description": "This integration signs in to YNAB with **your own** OAuth application, so your access token never passes through anyone else's app.\n\nOpen [YNAB Developer Settings]({developer_settings_url}) and create a **New Application**:\n- **Name:** anything not starting with \"YNAB\" (YNAB's rule), e.g. \"HA Bank Feed Alert for YNAB\".\n- **Website URL:** https://github.com/dhardiker/ha-bank-feed-alert-for-ynab\n- **Privacy Policy URL:** https://github.com/dhardiker/ha-bank-feed-alert-for-ynab/blob/main/PRIVACY.md\n- **Redirect URI:** `{redirect_url}` (the only one needed).\n- **Default plan selection:** off.\n\nSave it, then copy its **Client ID** and **Client Secret** here. The integration asks YNAB for read-only access; it can never change your plan."
+    "description": "This integration signs in to YNAB with **your own** OAuth application, so your access token never passes through anyone else's app.\n\nOpen [YNAB Developer Settings]({developer_settings_url}) and create a **New Application**:\n- **Name:** anything not starting with \"YNAB\" (YNAB's rule), e.g. \"HA Bank Feed Alert for YNAB\".\n- **Website URL:** `{website_url}`\n- **Privacy Policy URL:** `{privacy_url}`\n- **Redirect URI:** `{redirect_url}` (the only one needed).\n- **Default plan selection:** off.\n\nSave it, then copy its **Client ID** and **Client Secret** here. The integration asks YNAB for read-only access; it can never change your plan."
   },
   "config": {
     "step": {
