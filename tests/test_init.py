@@ -13,13 +13,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
 from custom_components.bank_feed_alert_for_ynab import issue_id
-from custom_components.bank_feed_alert_for_ynab.const import DOMAIN, OAUTH2_TOKEN, SCAN_INTERVAL
+from custom_components.bank_feed_alert_for_ynab.const import (
+    CONF_ESCALATE_AFTER_DAYS,
+    DOMAIN,
+    FAST_INTERVAL,
+    OAUTH2_TOKEN,
+)
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from .conftest import ACCOUNTS_URL, account, accounts_body
 
 NEEDS = "binary_sensor.home_bank_feeds_need_reconnecting"
+DUE = "sensor.home_next_reconnection_due"
 OVERDUE = "binary_sensor.home_reconnect_overdue"
 COUNT = "sensor.home_broken_bank_feeds"
 SINCE = "sensor.home_broken_since"
@@ -39,7 +45,7 @@ def _serve(aioclient_mock: AiohttpClientMocker, *accounts, status: int = 200) ->
         aioclient_mock.get(ACCOUNTS_URL, status=status, json={"error": {"id": str(status)}})
 
 
-async def _poll(hass: HomeAssistant, freezer: FrozenDateTimeFactory, by: timedelta = SCAN_INTERVAL) -> None:
+async def _poll(hass: HomeAssistant, freezer: FrozenDateTimeFactory, by: timedelta = timedelta(hours=4)) -> None:
     freezer.tick(by)
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
@@ -175,6 +181,90 @@ async def test_refused_refresh_starts_reauth(
 
     aioclient_mock.clear_requests()
     aioclient_mock.post(OAUTH2_TOKEN, status=400, json={"error": "invalid_grant"})
-    await _poll(hass, freezer, timedelta(hours=3))
+    await _poll(hass, freezer, timedelta(hours=4))
     flows = hass.config_entries.flow.async_progress()
     assert any(f["context"]["source"] == "reauth" and f["handler"] == DOMAIN for f in flows)
+
+
+@pytest.mark.usefixtures("credentials")
+async def test_interval_adapts(
+    hass: HomeAssistant, aioclient_mock, config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+):
+    _serve(aioclient_mock, account("a", "Current account"))
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = config_entry.runtime_data
+    assert coordinator.update_interval == timedelta(hours=4)
+
+    _serve(aioclient_mock, account("a", "Current account", in_error=True))
+    await _poll(hass, freezer)
+    assert coordinator.update_interval == FAST_INTERVAL
+
+    # A failed check retries soon, whatever the state before.
+    _serve(aioclient_mock, status=503)
+    await _poll(hass, freezer, FAST_INTERVAL)
+    assert coordinator.update_interval == FAST_INTERVAL
+
+
+@pytest.mark.usefixtures("credentials")
+async def test_escalate_straight_away(hass: HomeAssistant, aioclient_mock, freezer: FrozenDateTimeFactory):
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Home", unique_id="p0", data=dict(_entry_data()), options={CONF_ESCALATE_AFTER_DAYS: 0}
+    )
+    entry.add_to_hass(hass)
+    aioclient_mock.get(
+        "https://api.ynab.com/v1/plans/p0/accounts", json=accounts_body(account("a", "Current account", in_error=True))
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(OVERDUE).state == STATE_ON
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id(entry.entry_id))
+    assert issue.severity is ir.IssueSeverity.ERROR
+
+
+def _entry_data():
+    import time
+
+    return {
+        "auth_implementation": DOMAIN,
+        "token": {"access_token": "a", "refresh_token": "r", "token_type": "bearer", "expires_at": time.time() + 7200},
+        "plan_id": "p0",
+    }
+
+
+@pytest.mark.usefixtures("credentials")
+async def test_mark_reconnected_projects_the_next_lapse(
+    hass: HomeAssistant, aioclient_mock, config_entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+):
+    freezer.move_to("2026-11-18T09:00:00+00:00")
+    _serve(aioclient_mock, account("a", "Current account"), account("b", "Savings"))
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(DUE).state == "unknown"  # nothing seen reconnecting yet
+
+    # Plan-level target: every account; the projection is 90 days on.
+    await hass.services.async_call(
+        DOMAIN, "mark_reconnected", {"when": "2026-11-16T12:00:00+00:00"}, target={"entity_id": NEEDS}, blocking=True
+    )
+    due = hass.states.get(DUE).state
+    assert due.startswith("2027-02-14")
+    assert hass.states.get(CURRENT).attributes["expected_lapse"].startswith("2027-02-14")
+    assert hass.states.get(CURRENT).attributes["last_reconnected"].startswith("2026-11-16")
+
+    # Account-level target: just that one.
+    await hass.services.async_call(
+        DOMAIN, "mark_reconnected", {}, target={"entity_id": "binary_sensor.home_savings"}, blocking=True
+    )
+    assert hass.states.get("binary_sensor.home_savings").attributes["expected_lapse"].startswith("2027-02-16")
+    assert hass.states.get(DUE).state.startswith("2027-02-14")  # the soonest
+
+    # It survives a restart, and checks speed up two days before the lapse.
+    assert await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(DUE).state.startswith("2027-02-14")
+    coordinator = config_entry.runtime_data
+    assert coordinator.update_interval == timedelta(hours=4)
+    freezer.move_to("2027-02-12T13:00:00+00:00")
+    _serve(aioclient_mock, account("a", "Current account"), account("b", "Savings"))
+    await _poll(hass, freezer, timedelta(hours=4))
+    assert coordinator.update_interval == FAST_INTERVAL

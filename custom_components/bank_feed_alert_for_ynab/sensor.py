@@ -19,7 +19,9 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities([BrokenCount(coordinator), BrokenSince(coordinator), LastChecked(coordinator)])
+    async_add_entities(
+        [BrokenCount(coordinator), BrokenSince(coordinator), NextReconnectionDue(coordinator), LastChecked(coordinator)]
+    )
 
 
 class BrokenCount(FeedEntity, SensorEntity):
@@ -48,6 +50,23 @@ class BrokenSince(FeedEntity, SensorEntity):
     @property
     def native_value(self) -> datetime | None:
         return self.coordinator.data.broken_since
+
+
+class NextReconnectionDue(FeedEntity, SensorEntity):
+    """When the next healthy connection is projected to lapse (last reconnection + its lifetime).
+
+    Unknown until a reconnection has been seen or marked, or when projection is switched off.
+    """
+
+    _attr_translation_key = "next_reconnection_due"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, coordinator: FeedCoordinator) -> None:
+        super().__init__(coordinator, "next_reconnection_due")
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.data.next_lapse(self.coordinator.lifetime)
 
 
 class LastChecked(FeedEntity, SensorEntity):

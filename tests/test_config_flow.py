@@ -8,11 +8,13 @@ import pytest
 
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from homeassistant.helpers import config_entry_oauth2_flow
 
 from custom_components.bank_feed_alert_for_ynab.const import (
     API_BASE,
+    CONF_CHECK_INTERVAL_HOURS,
+    CONF_CONNECTION_LIFETIME_DAYS,
     CONF_ESCALATE_AFTER_DAYS,
     CONF_PLAN_ID,
     DOMAIN,
@@ -116,12 +118,18 @@ async def test_reauth_with_another_account_is_refused(hass: HomeAssistant, hass_
     assert config_entry.data["token"]["access_token"] == "access"
 
 
-async def test_options_set_escalation(hass: HomeAssistant, config_entry):
+async def test_options_are_set_within_bounds(hass: HomeAssistant, config_entry):
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
     assert result["type"] is FlowResultType.FORM
+    for too_far in (
+        {CONF_ESCALATE_AFTER_DAYS: 31, CONF_CHECK_INTERVAL_HOURS: 4, CONF_CONNECTION_LIFETIME_DAYS: 90},
+        {CONF_ESCALATE_AFTER_DAYS: 3, CONF_CHECK_INTERVAL_HOURS: 0, CONF_CONNECTION_LIFETIME_DAYS: 90},
+        {CONF_ESCALATE_AFTER_DAYS: 3, CONF_CHECK_INTERVAL_HOURS: 4, CONF_CONNECTION_LIFETIME_DAYS: 400},
+    ):
+        with pytest.raises(InvalidData):
+            await hass.config_entries.options.async_configure(result["flow_id"], too_far)
+    settings = {CONF_ESCALATE_AFTER_DAYS: 0, CONF_CHECK_INTERVAL_HOURS: 12, CONF_CONNECTION_LIFETIME_DAYS: 0}
     with patch(f"custom_components.{DOMAIN}.async_setup_entry", return_value=True):
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {CONF_ESCALATE_AFTER_DAYS: 5}
-        )
+        result = await hass.config_entries.options.async_configure(result["flow_id"], settings)
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert config_entry.options[CONF_ESCALATE_AFTER_DAYS] == 5
+    assert dict(config_entry.options) == settings

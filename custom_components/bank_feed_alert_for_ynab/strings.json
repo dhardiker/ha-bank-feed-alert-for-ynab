@@ -43,10 +43,12 @@
   "options": {
     "step": {
       "init": {
-        "title": "Escalation",
-        "description": "How long a bank connection may stay broken before the alert escalates: the repair becomes an error and the *Reconnect overdue* sensor turns on.",
+        "title": "Alert settings",
+        "description": "**Escalate after:** how long a bank connection may stay broken before the repair becomes an error and *Reconnect overdue* turns on (0 = straight away).\n\n**Check every:** how often to ask YNAB while all is well. While a connection is broken, and from 2 days before a projected lapse until a day after it, the integration checks every 30 minutes.\n\n**Connection lifetime:** how long your bank connections last before they must be renewed. 90 days is typical for UK and EU banks. Set 0 if yours don't expire on a schedule (most US banks), and nothing will be projected.",
         "data": {
-          "escalate_after_days": "Escalate after (days)"
+          "escalate_after_days": "Escalate after (days, 0–30)",
+          "check_interval_hours": "Check every (hours, 1–24)",
+          "connection_lifetime_days": "Connection lifetime (days, 0–365)"
         }
       }
     }
@@ -79,6 +81,21 @@
       },
       "last_checked": {
         "name": "Last checked"
+      },
+      "next_reconnection_due": {
+        "name": "Next reconnection due"
+      }
+    }
+  },
+  "services": {
+    "mark_reconnected": {
+      "name": "Mark reconnected",
+      "description": "Tell the integration you renewed a bank connection in YNAB, for example early, or before installing, so its next reconnection can be projected. Target an account's sensor for that account, or the plan's 'Bank feeds need reconnecting' sensor for all of them.",
+      "fields": {
+        "when": {
+          "name": "When",
+          "description": "When you reconnected. Leave empty for now."
+        }
       }
     }
   }

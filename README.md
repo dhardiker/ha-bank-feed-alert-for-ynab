@@ -27,15 +27,23 @@ One device per YNAB plan (named after the plan), with:
 | --- | --- |
 | `binary_sensor.<plan>_bank_feeds_need_reconnecting` | On while any linked account's bank connection is in error. Attributes: `accounts` (names) and `broken_since`. |
 | `binary_sensor.<plan>_reconnect_overdue` | On once a connection has been broken for the escalation period (option, default 3 days). |
-| `binary_sensor.<plan>_<account>` | One per linked account: on when that account needs reconnecting. Attributes: `in_error_since`, `last_reconnected`. Unavailable once the account is closed or unlinked. |
+| `binary_sensor.<plan>_<account>` | One per linked account: on when that account needs reconnecting. Attributes: `in_error_since`, `last_reconnected`, `expected_lapse`. Unavailable once the account is closed or unlinked. |
 | `sensor.<plan>_broken_bank_feeds` | How many linked accounts are in error. |
 | `sensor.<plan>_broken_since` | When the longest-running current error was first seen. |
+| `sensor.<plan>_next_reconnection_due` | When the next healthy connection is projected to lapse: its last reconnection plus the *connection lifetime* option. Unknown until a reconnection has been seen or marked. |
 | `sensor.<plan>_last_checked` | When YNAB last answered (diagnostic): proof the watch itself is working. |
 
-The integration checks YNAB every 30 minutes, one request per check (YNAB allows 200
-an hour). YNAB doesn't say when a connection broke, so "since" means the first check
-that saw it. It also doesn't say when a connection will expire. `last_reconnected`
-records when it came back, if you want to remind yourself before the next renewal.
+**How often it checks.** Every 4 hours while all is well (an option). Every 30 minutes while a
+connection is broken, and from 2 days before a projected lapse until a day after it. It also
+retries a failed check after 30 minutes. Each check is a single request; YNAB allows 200 an hour.
+
+**What "since" means.** YNAB doesn't say when a connection broke, so "since" means the first
+check that saw it.
+
+**Projected lapses.** YNAB doesn't say when a connection will expire either. The integration
+notes when each one comes back after an error (`last_reconnected`) and adds the
+*connection lifetime* to project the next lapse. If you renew a connection early, or reconnected
+before installing this, use the **Mark reconnected** action so the projection starts from then.
 
 ## Install
 
@@ -59,16 +67,27 @@ Requires Home Assistant 2025.2 or later.
      `/auth/external/callback`.
    - Leave *Default plan selection* off.
 
-   Applications are private to you, and an application's owner isn't limited by
-   YNAB's "restricted mode" for new applications.
+   **Every installation uses its own OAuth application.** There is no shared app or
+   client secret behind this project. New YNAB applications start in a "restricted mode"
+   that allows 25 users *other than the owner*, and you are the owner of yours, so the
+   limit never comes into it. It also means no request ever goes through anyone but YNAB.
 2. **Add the integration.** *Settings → Devices & services → Add integration → Bank
    Feed Alert for YNAB*. Enter the application's **Client ID** and **Client Secret**
    when asked; they are stored as Home Assistant *Application Credentials*.
 3. **Authorise.** You'll be sent to YNAB to approve **read-only** access. If you have
    more than one plan, pick the one to watch. Add the integration again for another.
 
-**Options:** *Escalate after (days)*, default 3, sets when the repair becomes an error
-and `reconnect_overdue` turns on.
+**Options** (*Configure* on the integration), each kept within sensible bounds:
+
+| Option | Default | Range | What it does |
+| --- | --- | --- | --- |
+| Escalate after (days) | 3 | 0–30 | When the repair becomes an error and `reconnect_overdue` turns on. 0 means straight away. |
+| Check every (hours) | 4 | 1–24 | How often to ask YNAB while all is well. The faster 30-minute rate is fixed. |
+| Connection lifetime (days) | 90 | 0–365 | How long your bank connections last. 90 suits UK and EU banks. 0 switches projection off, which suits banks that don't lapse on a schedule (most in the US). |
+
+**Mark reconnected** (`bank_feed_alert_for_ynab.mark_reconnected`): target an account's sensor
+to restart that account's clock, or the plan's *Bank feeds need reconnecting* sensor for all of
+them. `when` defaults to now.
 
 If YNAB ever stops accepting the authorisation, Home Assistant asks you to sign in
 again; the alert history is kept.
@@ -114,6 +133,26 @@ wall-panel warning, or both:
           data:
             push:
               interruption-level: time-sensitive
+```
+
+Get a reminder before a projected lapse, so you can renew at a convenient moment (if your bank
+lets you renew early in YNAB):
+
+```yaml
+  - alias: "YNAB reconnection due soon"
+    triggers:
+      - trigger: time
+        at: "09:00:00"
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set due = states('sensor.home_next_reconnection_due') | as_datetime %}
+          {{ due is not none and 0 <= (due - now()).days < 3 }}
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: "YNAB bank connection due for renewal"
+          message: "Projected to lapse {{ as_local(states('sensor.home_next_reconnection_due') | as_datetime).strftime('%a %d %b') }}."
 ```
 
 Entity IDs follow your plan's name. The examples assume a plan called *Home*.

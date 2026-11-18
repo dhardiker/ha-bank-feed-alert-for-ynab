@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from custom_components.bank_feed_alert_for_ynab.feeds import evaluate, is_linked
+from custom_components.bank_feed_alert_for_ynab.feeds import evaluate, is_linked, next_interval
 
 T0 = datetime(2026, 11, 9, 9, 0, tzinfo=UTC)
 
@@ -68,3 +68,47 @@ def test_bad_memory_is_ignored_not_fatal():
     )
     assert snap.feeds["a"].in_error_since == T0  # unparseable -> treated as new
     assert snap.feeds["a"].last_reconnected is None  # naive timestamps are never written; ignored
+
+
+NORMAL, FAST = timedelta(hours=4), timedelta(minutes=30)
+LIFE = timedelta(days=90)
+WIN = {"normal": NORMAL, "fast": FAST, "lifetime": LIFE, "before": timedelta(days=2), "after": timedelta(days=1)}
+
+
+def _reconnected_at(when):
+    broken = evaluate([acct("a", "Current", in_error=True)], {}, when - timedelta(hours=1))
+    return evaluate([acct("a", "Current")], broken.memory(), when)
+
+
+def test_expected_lapse_follows_the_last_reconnection():
+    snap = _reconnected_at(T0)
+    assert snap.feeds["a"].expected_lapse(LIFE) == T0 + LIFE
+    assert snap.next_lapse(LIFE) == T0 + LIFE
+    assert snap.feeds["a"].expected_lapse(None) is None  # projection switched off
+    never = evaluate([acct("b", "Savings")], {}, T0)
+    assert never.next_lapse(LIFE) is None  # no reconnection seen: nothing to project
+
+
+def test_interval_is_normal_far_from_a_lapse_and_fast_when_broken():
+    snap = _reconnected_at(T0)
+    assert next_interval(snap, T0 + timedelta(days=10), **WIN) == NORMAL
+    broken = evaluate([acct("a", "Current", in_error=True)], snap.memory(), T0 + timedelta(days=10))
+    assert next_interval(broken, T0 + timedelta(days=10), **WIN) == FAST
+
+
+def test_interval_is_fast_from_two_days_before_to_one_day_after_a_projected_lapse():
+    snap = _reconnected_at(T0)
+    lapse = T0 + LIFE
+    assert next_interval(snap, lapse - timedelta(days=2), **WIN) == FAST
+    assert next_interval(snap, lapse, **WIN) == FAST
+    assert next_interval(snap, lapse + timedelta(days=1), **WIN) == FAST
+    # Still healthy a day after: the projection was wrong; back to normal.
+    assert next_interval(snap, lapse + timedelta(days=1, minutes=1), **WIN) == NORMAL
+
+
+def test_interval_never_sleeps_past_the_start_of_a_window():
+    snap = _reconnected_at(T0)
+    start = T0 + LIFE - timedelta(days=2)
+    assert next_interval(snap, start - timedelta(hours=1), **WIN) == timedelta(hours=1)
+    assert next_interval(snap, start - timedelta(minutes=5), **WIN) == FAST  # never below fast
+    assert next_interval(snap, start - timedelta(hours=1), **{**WIN, "lifetime": None}) == NORMAL

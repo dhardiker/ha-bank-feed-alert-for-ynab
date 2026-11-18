@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
+
+import voluptuous as vol
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from . import escalate_after
+from .const import SERVICE_MARK_RECONNECTED
 from .coordinator import FeedConfigEntry, FeedCoordinator
 from .entity import FeedEntity
 
@@ -21,6 +25,13 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     async_add_entities([NeedsReconnecting(coordinator), ReconnectOverdue(coordinator)])
+
+    # Target an account's sensor to restart that account's clock, or a plan-level sensor for all.
+    entity_platform.async_get_current_platform().async_register_entity_service(
+        SERVICE_MARK_RECONNECTED,
+        {vol.Optional("when"): cv.datetime},
+        "async_mark_reconnected",
+    )
 
     known: set[str] = set()
 
@@ -35,7 +46,22 @@ async def async_setup_entry(
     entry.async_on_unload(coordinator.async_add_listener(_add_new_accounts))
 
 
-class NeedsReconnecting(FeedEntity, BinarySensorEntity):
+def _as_utc(when: datetime | None) -> datetime:
+    if when is None:
+        return dt_util.utcnow()
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt_util.get_default_time_zone())
+    return dt_util.as_utc(when)
+
+
+class PlanBinarySensor(FeedEntity, BinarySensorEntity):
+    """A plan-level sensor: marking it reconnected applies to every linked account."""
+
+    async def async_mark_reconnected(self, when: datetime | None = None) -> None:
+        await self.coordinator.async_mark_reconnected(list(self.coordinator.data.feeds), _as_utc(when))
+
+
+class NeedsReconnecting(PlanBinarySensor):
     """On while any linked account's bank connection is in error."""
 
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
@@ -57,7 +83,7 @@ class NeedsReconnecting(FeedEntity, BinarySensorEntity):
         }
 
 
-class ReconnectOverdue(FeedEntity, BinarySensorEntity):
+class ReconnectOverdue(PlanBinarySensor):
     """On once a connection has been broken for the escalation period (default 3 days)."""
 
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
@@ -68,11 +94,11 @@ class ReconnectOverdue(FeedEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        return self.coordinator.data.overdue(escalate_after(self.coordinator.config_entry), dt_util.utcnow())
+        return self.coordinator.data.overdue(self.coordinator.escalate_after, dt_util.utcnow())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"escalate_after_days": escalate_after(self.coordinator.config_entry).days}
+        return {"escalate_after_days": self.coordinator.escalate_after.days}
 
 
 class AccountFeed(FeedEntity, BinarySensorEntity):
@@ -99,10 +125,15 @@ class AccountFeed(FeedEntity, BinarySensorEntity):
         feed = self.coordinator.data.feeds.get(self._account_id)
         if feed is None:
             return {}
+        lapse = feed.expected_lapse(self.coordinator.lifetime)
         return {
             "in_error_since": feed.in_error_since.isoformat() if feed.in_error_since else None,
             "last_reconnected": feed.last_reconnected.isoformat() if feed.last_reconnected else None,
+            "expected_lapse": lapse.isoformat() if lapse else None,
         }
+
+    async def async_mark_reconnected(self, when: datetime | None = None) -> None:
+        await self.coordinator.async_mark_reconnected([self._account_id], _as_utc(when))
 
     @callback
     def _handle_coordinator_update(self) -> None:

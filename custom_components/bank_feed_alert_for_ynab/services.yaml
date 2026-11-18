@@ -1,0 +1,10 @@
+mark_reconnected:
+  target:
+    entity:
+      integration: bank_feed_alert_for_ynab
+      domain: binary_sensor
+  fields:
+    when:
+      required: false
+      selector:
+        datetime:

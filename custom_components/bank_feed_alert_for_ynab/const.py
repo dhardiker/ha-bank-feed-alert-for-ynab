@@ -16,10 +16,26 @@ YNAB_DEVELOPER_SETTINGS_URL = "https://app.ynab.com/settings/developer"
 MY_REDIRECT_URL = "https://my.home-assistant.io/redirect/oauth"
 
 CONF_PLAN_ID = "plan_id"
+
+# Options, each bounded so nobody can set the integration to hammer YNAB.
 CONF_ESCALATE_AFTER_DAYS = "escalate_after_days"
 DEFAULT_ESCALATE_AFTER_DAYS = 3
+ESCALATE_AFTER_DAYS_RANGE = (0, 30)  # 0: escalate as soon as a feed breaks
 
-# One request per poll; YNAB allows 200 an hour per token.
-SCAN_INTERVAL = timedelta(minutes=30)
+CONF_CHECK_INTERVAL_HOURS = "check_interval_hours"
+DEFAULT_CHECK_INTERVAL_HOURS = 4
+CHECK_INTERVAL_HOURS_RANGE = (1, 24)
+
+CONF_CONNECTION_LIFETIME_DAYS = "connection_lifetime_days"
+DEFAULT_CONNECTION_LIFETIME_DAYS = 90  # UK/EU open-banking consents
+CONNECTION_LIFETIME_DAYS_RANGE = (0, 365)  # 0: don't project lapses
+
+# Fixed: the fast rate, used while a feed is broken and around a projected lapse.
+# One request per check; YNAB allows 200 an hour per token.
+FAST_INTERVAL = timedelta(minutes=30)
+WINDOW_BEFORE_LAPSE = timedelta(days=2)
+WINDOW_AFTER_LAPSE = timedelta(days=1)
+
+SERVICE_MARK_RECONNECTED = "mark_reconnected"
 
 STORAGE_VERSION = 1

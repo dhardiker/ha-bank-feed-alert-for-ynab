@@ -1,13 +1,37 @@
 {
   "entity": {
     "binary_sensor": {
-      "needs_reconnecting": {"default": "mdi:bank-check", "state": {"on": "mdi:bank-remove"}},
-      "reconnect_overdue": {"default": "mdi:bank-check", "state": {"on": "mdi:bank-off"}}
+      "needs_reconnecting": {
+        "default": "mdi:bank-check",
+        "state": {
+          "on": "mdi:bank-remove"
+        }
+      },
+      "reconnect_overdue": {
+        "default": "mdi:bank-check",
+        "state": {
+          "on": "mdi:bank-off"
+        }
+      }
     },
     "sensor": {
-      "broken_feeds": {"default": "mdi:bank-remove"},
-      "broken_since": {"default": "mdi:clock-alert-outline"},
-      "last_checked": {"default": "mdi:clock-check-outline"}
+      "broken_feeds": {
+        "default": "mdi:bank-remove"
+      },
+      "broken_since": {
+        "default": "mdi:clock-alert-outline"
+      },
+      "last_checked": {
+        "default": "mdi:clock-check-outline"
+      },
+      "next_reconnection_due": {
+        "default": "mdi:calendar-clock"
+      }
+    }
+  },
+  "services": {
+    "mark_reconnected": {
+      "service": "mdi:bank-check"
     }
   }
 }

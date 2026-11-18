@@ -13,7 +13,8 @@ your data.
   made with a read-only token, so the integration cannot change your plan.
 - **When it signs in**, it lists your plans (`GET /plans`) once, so you can pick
   the one to watch.
-- **Every 30 minutes**, it reads that plan's accounts (`GET /plans/{plan_id}/accounts`).
+- **Every few hours** (4 by default; every 30 minutes while a connection is broken or about
+  to lapse), it reads that plan's accounts (`GET /plans/{plan_id}/accounts`).
   It uses only each account's ID, name, whether it is closed or deleted, and YNAB's
   two bank-connection flags (`direct_import_linked`, `direct_import_in_error`). It
   ignores balances and everything else in the response, and never reads
@@ -24,7 +25,7 @@ your data.
 - **The OAuth access and refresh tokens:** in the integration's config entry, in
   Home Assistant's own storage, as for any OAuth integration.
 - **For each linked account:** its ID, and the times an error was first seen and the
-  connection was next seen healthy. These are in Home Assistant's storage
+  connection was next seen healthy (or that you marked it reconnected). These are in Home Assistant's storage
   (`.storage/bank_feed_alert_for_ynab.<entry id>`), so an alert keeps its start time
   across restarts.
 - **Entities and the repair issue:** account names, as shown in Home Assistant.

@@ -21,10 +21,17 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     API_BASE,
+    CHECK_INTERVAL_HOURS_RANGE,
+    CONF_CHECK_INTERVAL_HOURS,
+    CONF_CONNECTION_LIFETIME_DAYS,
     CONF_ESCALATE_AFTER_DAYS,
     CONF_PLAN_ID,
+    CONNECTION_LIFETIME_DAYS_RANGE,
+    DEFAULT_CHECK_INTERVAL_HOURS,
+    DEFAULT_CONNECTION_LIFETIME_DAYS,
     DEFAULT_ESCALATE_AFTER_DAYS,
     DOMAIN,
+    ESCALATE_AFTER_DAYS_RANGE,
     OAUTH2_SCOPE,
 )
 
@@ -113,19 +120,32 @@ class OAuth2FlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
 
 
 class OptionsFlowHandler(OptionsFlow):
-    """How long before a broken feed escalates."""
+    """Escalation, check interval and connection lifetime - each bounded."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(data=user_input)
-        current = self.config_entry.options.get(CONF_ESCALATE_AFTER_DAYS, DEFAULT_ESCALATE_AFTER_DAYS)
+        options = self.config_entry.options
+
+        def bounded(key: str, default: int, bounds: tuple[int, int]) -> tuple[vol.Required, Any]:
+            return (
+                vol.Required(key, default=options.get(key, default)),
+                vol.All(vol.Coerce(int), vol.Range(min=bounds[0], max=bounds[1])),
+            )
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_ESCALATE_AFTER_DAYS, default=current): vol.All(
-                        vol.Coerce(int), vol.Range(min=1, max=60)
-                    )
-                }
+                dict(
+                    [
+                        bounded(CONF_ESCALATE_AFTER_DAYS, DEFAULT_ESCALATE_AFTER_DAYS, ESCALATE_AFTER_DAYS_RANGE),
+                        bounded(CONF_CHECK_INTERVAL_HOURS, DEFAULT_CHECK_INTERVAL_HOURS, CHECK_INTERVAL_HOURS_RANGE),
+                        bounded(
+                            CONF_CONNECTION_LIFETIME_DAYS,
+                            DEFAULT_CONNECTION_LIFETIME_DAYS,
+                            CONNECTION_LIFETIME_DAYS_RANGE,
+                        ),
+                    ]
+                )
             ),
         )

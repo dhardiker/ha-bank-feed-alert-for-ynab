@@ -28,7 +28,13 @@ class Feed:
     in_error_since: datetime | None
     """First poll that saw the error (so "at least since"); None while healthy."""
     last_reconnected: datetime | None
-    """First poll that saw the account healthy after an error, if we have seen one."""
+    """First poll that saw the account healthy after an error, or when the user said they reconnected it."""
+
+    def expected_lapse(self, lifetime: timedelta | None) -> datetime | None:
+        """When the connection should next need reconnecting, if its lifetime and last reconnection are known."""
+        if self.in_error or not lifetime or self.last_reconnected is None:
+            return None
+        return self.last_reconnected + lifetime
 
 
 @dataclass(frozen=True)
@@ -51,6 +57,11 @@ class Snapshot:
         """When the longest-running current error began."""
         onsets = [feed.in_error_since for feed in self.broken if feed.in_error_since]
         return min(onsets) if onsets else None
+
+    def next_lapse(self, lifetime: timedelta | None) -> datetime | None:
+        """The soonest projected lapse among healthy feeds."""
+        lapses = [lapse for feed in self.feeds.values() if (lapse := feed.expected_lapse(lifetime))]
+        return min(lapses) if lapses else None
 
     def overdue(self, after: timedelta, now: datetime) -> bool:
         """True once any feed has been in error for `after` or longer."""
@@ -107,6 +118,36 @@ def evaluate(
             last_reconnected=reconnected,
         )
     return Snapshot(feeds=feeds, checked_at=now)
+
+
+def next_interval(
+    snapshot: Snapshot,
+    now: datetime,
+    *,
+    normal: timedelta,
+    fast: timedelta,
+    lifetime: timedelta | None,
+    before: timedelta,
+    after: timedelta,
+) -> timedelta:
+    """How long to wait before asking YNAB again.
+
+    Fast while anything is broken, and from `before` a projected lapse until `after` it;
+    otherwise normal, but never sleeping past the start of the next projected window.
+    """
+    if snapshot.broken:
+        return fast
+    wake = normal
+    for feed in snapshot.feeds.values():
+        lapse = feed.expected_lapse(lifetime)
+        if lapse is None:
+            continue
+        start, end = lapse - before, lapse + after
+        if start <= now <= end:
+            return fast
+        if now < start:
+            wake = min(wake, max(fast, start - now))
+    return wake
 
 
 def _iso(value: datetime | None) -> str | None:
