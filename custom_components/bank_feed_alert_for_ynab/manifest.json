@@ -1,0 +1,13 @@
+{
+  "domain": "bank_feed_alert_for_ynab",
+  "name": "Bank Feed Alert for YNAB",
+  "codeowners": ["@dhardiker"],
+  "config_flow": true,
+  "dependencies": ["application_credentials"],
+  "documentation": "https://github.com/dhardiker/ha-bank-feed-alert-for-ynab",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/dhardiker/ha-bank-feed-alert-for-ynab/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,85 @@
+{
+  "application_credentials": {
+    "description": "This integration signs in to YNAB with **your own** OAuth application, so your access token never passes through anyone else's app.\n\n1. Open [YNAB Developer Settings]({developer_settings_url}) and create a **New Application**.\n2. Give it a name that does not start with \"YNAB\" (YNAB's rule), for example \"Bank Feed Alert for YNAB (home)\".\n3. Set the **Redirect URI** to `{redirect_url}`.\n4. Leave **Default plan selection** off.\n5. Save, then copy the **Client ID** and **Client Secret** here.\n\nThe integration asks YNAB for read-only access; it can never change your plan."
+  },
+  "config": {
+    "step": {
+      "pick_implementation": {
+        "title": "Pick authentication method"
+      },
+      "plan": {
+        "title": "Choose a plan",
+        "description": "Your YNAB account has more than one plan. Pick the one whose bank connections to watch; add the integration again for another.",
+        "data": {
+          "plan_id": "Plan"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Sign in to YNAB again",
+        "description": "YNAB no longer accepts this integration's authorisation. Sign in again to keep watching your bank connections."
+      }
+    },
+    "abort": {
+      "already_configured": "This plan is already being watched.",
+      "cannot_connect": "Could not reach YNAB. Try again in a moment.",
+      "no_plans": "This YNAB account has no plans to watch.",
+      "wrong_account": "That YNAB account cannot see the plan this entry watches. Sign in with the account that owns it.",
+      "reauth_successful": "Signed in again.",
+      "missing_configuration": "The integration is not configured. Add your YNAB OAuth application under Application Credentials first.",
+      "missing_credentials": "Add your YNAB OAuth application under Application Credentials first.",
+      "authorize_url_timeout": "Timed out generating the authorisation URL.",
+      "no_url_available": "No URL available. See the documentation for the redirect URI.",
+      "oauth_error": "YNAB returned invalid token data.",
+      "oauth_failed": "Could not get an access token from YNAB.",
+      "oauth_timeout": "Timed out getting an access token from YNAB.",
+      "oauth_unauthorized": "YNAB refused the authorisation. Check the Client ID, Client Secret and Redirect URI.",
+      "oauth_implementation_unavailable": "The OAuth implementation is unavailable. Try again later.",
+      "user_rejected_authorize": "Authorisation was declined in YNAB."
+    },
+    "create_entry": {
+      "default": "Signed in to YNAB (read-only)."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Escalation",
+        "description": "How long a bank connection may stay broken before the alert escalates: the repair becomes an error and the *Reconnect overdue* sensor turns on.",
+        "data": {
+          "escalate_after_days": "Escalate after (days)"
+        }
+      }
+    }
+  },
+  "issues": {
+    "reconnect_needed": {
+      "title": "YNAB bank connections need reconnecting ({plan})",
+      "description": "{count} linked account(s) in **{plan}** have stopped importing because their bank connection needs attention: {accounts}.\n\nBroken since at least {since}. Open YNAB, go to **Manage Bank Connections**, and reconnect each one. This alert clears itself at the next check after they are healthy again.\n\nIf they are still broken after {days} day(s), this becomes an error."
+    },
+    "reconnect_overdue": {
+      "title": "YNAB bank connections still need reconnecting ({plan})",
+      "description": "{count} linked account(s) in **{plan}** have been unable to import since at least {since}: {accounts}.\n\nTransactions are piling up outside YNAB. Open YNAB, go to **Manage Bank Connections**, and reconnect each one now. This alert clears itself at the next check after they are healthy again."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "needs_reconnecting": {
+        "name": "Bank feeds need reconnecting"
+      },
+      "reconnect_overdue": {
+        "name": "Reconnect overdue"
+      }
+    },
+    "sensor": {
+      "broken_feeds": {
+        "name": "Broken bank feeds"
+      },
+      "broken_since": {
+        "name": "Broken since"
+      },
+      "last_checked": {
+        "name": "Last checked"
+      }
+    }
+  }
+}

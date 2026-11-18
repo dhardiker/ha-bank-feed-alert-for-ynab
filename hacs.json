@@ -1,0 +1,5 @@
+{
+  "name": "Bank Feed Alert for YNAB",
+  "content_in_root": false,
+  "homeassistant": "2025.2.0"
+}
