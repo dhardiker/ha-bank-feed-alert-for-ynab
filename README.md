@@ -103,8 +103,21 @@ credentials**:
 | OAuth client ID | The **Client ID** of the application from step 1, shown in YNAB's Developer Settings. |
 | OAuth client secret | Its **Client Secret**, from the same page. |
 
-Then you're sent to YNAB to approve **read-only** access. If you have more than one plan, pick
-the one to watch, and add the integration again for another.
+Then Home Assistant takes you through signing in:
+
+1. **YNAB asks you to authorise your application.** The list of what it "will be able to read" is
+   YNAB's standard wording for read-only access. The integration itself only reads your plans
+   and accounts ([PRIVACY.md](PRIVACY.md)). Click **Authorize**.
+
+   ![YNAB's authorisation page for the application](docs/images/ynab-authorize.png)
+
+2. **My Home Assistant asks to link the account.** Check that *Your instance URL* is your Home
+   Assistant (the pencil changes it), then click **Link account**.
+
+   ![My Home Assistant's "Link account to Home Assistant?" page](docs/images/my-home-assistant-link-account.png)
+
+3. **Back in Home Assistant**, pick the plan to watch if you have more than one, and add the
+   integration again for another. The plan appears as a device with the entities below.
 
 ### Options
 
@@ -123,6 +136,26 @@ to restart that account's clock, or the plan's *Bank feeds need reconnecting* se
 them. `when` defaults to now.
 
 If YNAB ever stops accepting the authorisation, Home Assistant asks you to sign in
+again; the alert history is kept.
+
+## Troubleshooting
+
+**"OAuth authorization error while obtaining access token"**, straight after linking. YNAB
+rejected your application's Client ID and Client Secret: its token endpoint answers 401
+`invalid_client`, typically a mistyped secret or a stray space. Fix it like this:
+1. Copy the Client Secret again from YNAB's Developer Settings.
+2. In Home Assistant, remove the stored credentials: *Settings → Devices & services → ⋮ →
+   Application credentials*.
+3. Add the integration again.
+
+To see YNAB's own reason, turn on debug logging for
+`homeassistant.helpers.config_entry_oauth2_flow`.
+
+**"Error while obtaining access token"** or a timeout means YNAB couldn't be reached. Try again
+later.
+
+**"Reauthentication required"** later on means YNAB stopped accepting the integration's
+authorisation, for example because access was revoked in YNAB. Follow the prompt to sign in
 again; the alert history is kept.
 
 ## Learning when connections lapse
