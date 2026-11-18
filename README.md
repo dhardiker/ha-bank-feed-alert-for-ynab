@@ -80,22 +80,30 @@ limit never comes into it. It also means no request ever goes through anyone but
 
 ### 2. Install
 
-**HACS** (shown as *Marketplace* in recent Home Assistant versions): open its ⋮ menu →
-*Custom repositories* (or *Add from link*), and add
-`https://github.com/dhardiker/ha-bank-feed-alert-for-ynab` as an *Integration*. Then find
-**Bank Feed Alert for YNAB** in the HACS / Marketplace list (not under *Settings → Devices &
-services* yet), download it, and restart Home Assistant if asked.
+Install through the **Marketplace**, Home Assistant's name for what used to be HACS:
 
-**Manual:** copy `custom_components/bank_feed_alert_for_ynab/` into your
-`config/custom_components/` and restart.
+1. Open **Marketplace** from the Home Assistant sidebar.
+2. Click **Add from link** (top right), paste
+   `https://github.com/dhardiker/ha-bank-feed-alert-for-ynab`, and choose **Integration** if
+   asked for a type. (On older HACS versions it's *⋮ → Custom repositories*.)
+3. Go to **Browse** and search for **Bank Feed Alert for YNAB**. It's listed under *New*.
+
+   ![The Marketplace's Browse tab, showing Bank Feed Alert for YNAB under New](docs/images/marketplace-browse.png)
+
+4. Open it and install it (**Download**). Install it here in the Marketplace: it won't appear
+   under *Settings → Devices & services* until it's installed.
+5. Restart Home Assistant when prompted.
+
+**Manual install, without the Marketplace:** copy `custom_components/bank_feed_alert_for_ynab/`
+into your `config/custom_components/` and restart.
 
 Requires Home Assistant 2025.2 or later.
 
 ### 3. Add it and sign in
 
-*Settings → Devices & services → Add integration → Bank Feed Alert for YNAB* (newer versions may
-offer this straight after installing). Home Assistant first asks for **application
-credentials**:
+Home Assistant first asks for your YNAB application's **credentials**. It may do this straight
+after installing; otherwise it asks when you add the integration (*Settings → Devices & services
+→ Add integration → Bank Feed Alert for YNAB*):
 
 | Field | What to enter |
 | --- | --- |
@@ -103,7 +111,9 @@ credentials**:
 | OAuth client ID | The **Client ID** of the application from step 1, shown in YNAB's Developer Settings. |
 | OAuth client secret | Its **Client Secret**, from the same page. |
 
-Then Home Assistant takes you through signing in:
+With the credentials saved, add the integration if Home Assistant didn't start it for you
+(*Settings → Devices & services → Add integration → Bank Feed Alert for YNAB*). It takes you
+through signing in:
 
 1. **YNAB asks you to authorise your application.** The list of what it "will be able to read" is
    YNAB's standard wording for read-only access. The integration itself only reads your plans
