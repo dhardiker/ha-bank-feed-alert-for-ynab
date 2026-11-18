@@ -143,6 +143,58 @@ through signing in:
 
 That's it: the device lists every linked account (names blanked here), checked straight away.
 
+### 4. Optional: tell it when you last reconnected
+
+The integration projects each connection's next lapse from the last time it saw that connection
+reconnected. Just after installing, it hasn't seen one, so *Next reconnection due* says
+*Unknown*. If you know roughly when you last reconnected your banks in YNAB, tell it.
+
+**Without this step,** alerts work just the same: a break is noticed at the next check (every 4
+hours by default) and raises the repair, the entities and your automations. There's simply no
+projection until the first break-and-reconnect, which the integration records itself; from then
+on it projects every lapse.
+
+**With it,** projection starts straight away:
+- *Next reconnection due* shows a date you can remind yourself about (see the example automation
+  below).
+- Checks speed up to every 30 minutes from 2 days before the projected lapse, so the first lapse
+  is caught within half an hour rather than within hours.
+
+Marked times are kept in the history as *marked*, so they don't skew what it learns about real
+lifetimes.
+
+**How:** *Developer tools → Actions*, switch to YAML mode and run the following. Use your own
+entity IDs (they follow the device name and area from step 3). Times are in Home Assistant's
+time zone.
+
+```yaml
+# Every linked account: target the plan's "Bank feeds need reconnecting" sensor
+action: bank_feed_alert_for_ynab.mark_reconnected
+target:
+  entity_id: binary_sensor.home_bank_feeds_need_reconnecting
+data:
+  when: "2026-11-17 22:40:00"
+```
+
+Then run it again for any account you reconnected at a different time. This overrides just that
+account:
+
+```yaml
+action: bank_feed_alert_for_ynab.mark_reconnected
+target:
+  entity_id: binary_sensor.home_current_account
+data:
+  when: "2026-09-20 15:00:00"
+```
+
+In UI mode it's *Bank Feed Alert for YNAB: Mark reconnected*: pick the sensor and set *When*.
+Leave *When* empty to mean "just now", which is also how to tell it about an early renewal later
+on.
+
+If you're not sure of the time, err late: the fast checks run from 2 days before a projected lapse
+to only 1 day after, so a time that's a little late still covers the real lapse, and one that's
+too early might not. YNAB doesn't show when a connection was made.
+
 ### Options
 
 *Configure* on the integration. Each option is kept within sensible bounds:
@@ -155,7 +207,7 @@ That's it: the device lists every linked account (names blanked here), checked s
 
 ### Mark reconnected
 
-`bank_feed_alert_for_ynab.mark_reconnected`: target an account's sensor
+`bank_feed_alert_for_ynab.mark_reconnected` ([step 4](#4-optional-tell-it-when-you-last-reconnected) shows it in use): target an account's sensor
 to restart that account's clock, or the plan's *Bank feeds need reconnecting* sensor for all of
 them. `when` defaults to now.
 
