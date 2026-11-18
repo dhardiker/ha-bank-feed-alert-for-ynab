@@ -13,9 +13,8 @@ OAUTH2_SCOPE = "read-only"
 
 YNAB_APP_URL = "https://app.ynab.com/"
 YNAB_DEVELOPER_SETTINGS_URL = "https://app.ynab.com/settings/developer"
-MY_REDIRECT_URL = "https://my.home-assistant.io/redirect/oauth"
 PROJECT_URL = "https://github.com/dhardiker/ha-bank-feed-alert-for-ynab"
-PRIVACY_URL = f"{PROJECT_URL}/blob/main/PRIVACY.md"
+SETUP_URL = f"{PROJECT_URL}#1-create-a-ynab-oauth-application"
 
 CONF_PLAN_ID = "plan_id"
 
